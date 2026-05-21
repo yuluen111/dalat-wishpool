@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmh9ltQGRNTD9roY6tpsq09e4BCJvZzNlRaqxJDQDVOibHt-a2n-V2hTCmUIiXOxfQ/exec";
+
 const CATEGORIES = [
   { id: "all", label: "全部", emoji: "🗺️" },
   { id: "stay", label: "住宿", emoji: "🏨" },
@@ -28,8 +30,6 @@ const CAT_COLORS = {
   stay: "#534AB7", food: "#D85A30", activity: "#0F6E56",
   sight: "#185FA5", transport: "#BA7517", other: "#888780",
 };
-
-const INITIAL_ITEMS = [];
 
 function getAvatarStyle(name) {
   if (!name) return AVATARS[0];
@@ -67,6 +67,13 @@ function detectSourceType(url) {
   return "網站";
 }
 
+function parseLatLng(mapsUrl) {
+  if (!mapsUrl) return null;
+  const qMatch = mapsUrl.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
+  return null;
+}
+
 const iStyle = {
   input: {
     width: "100%", padding: "9px 12px", borderRadius: 8,
@@ -76,109 +83,83 @@ const iStyle = {
   label: { fontSize: 12, color: "#888", display: "block", marginBottom: 5, fontWeight: 500 },
 };
 
-// 解析 Google Maps URL 取得座標
-function parseLatLng(mapsUrl) {
-  if (!mapsUrl) return null;
-  const qMatch = mapsUrl.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-  if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
-  return null;
+async function fetchItems() {
+  const res = await fetch(SCRIPT_URL);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
-function MapView({ items, onSelectItem }) {
+async function saveItems(items) {
+  await fetch(SCRIPT_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+}
+
+function MapView({ items }) {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
-  const markersRef = useRef([]);
   const [selected, setSelected] = useState(null);
   const withCoords = items.filter(i => i.lat && i.lng);
+  const withMaps = items.filter(i => i.mapsUrl);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (leafletMap.current) return;
-
+    if (!mapRef.current || leafletMap.current || !window.L) return;
     const L = window.L;
-    if (!L) return;
-
-    const map = L.map(mapRef.current, {
-      center: [11.9415, 108.4384],
-      zoom: 13,
-      zoomControl: true,
-    });
-
+    const map = L.map(mapRef.current, { center: [11.9415, 108.4384], zoom: 13 });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors",
-      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors", maxZoom: 19,
     }).addTo(map);
-
     leafletMap.current = map;
 
     withCoords.forEach(item => {
       const color = CAT_COLORS[item.category] || "#534AB7";
       const icon = L.divIcon({
-        html: `<div style="
-          width:32px;height:32px;border-radius:50% 50% 50% 0;
-          background:${color};border:2px solid #fff;
-          transform:rotate(-45deg);
-          box-shadow:0 2px 8px rgba(0,0,0,0.2);
-        "></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        className: "",
+        html: `<div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:${color};border:2px solid #fff;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,0.2)"></div>`,
+        iconSize: [28, 28], iconAnchor: [14, 28], className: "",
       });
-
-      const marker = L.marker([item.lat, item.lng], { icon })
-        .addTo(map)
-        .on("click", () => setSelected(item));
-
-      markersRef.current.push(marker);
+      L.marker([item.lat, item.lng], { icon }).addTo(map).on("click", () => setSelected(item));
     });
 
-    return () => {
-      map.remove();
-      leafletMap.current = null;
-    };
+    return () => { map.remove(); leafletMap.current = null; };
   }, []);
 
-  const withMaps = items.filter(i => i.mapsUrl);
+  if (withMaps.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px", color: "#bbb" }}>
+        <div style={{ fontSize: 36, marginBottom: 10 }}>📍</div>
+        <div style={{ fontSize: 14 }}>還沒有地點有地圖連結</div>
+        <div style={{ fontSize: 12, marginTop: 6 }}>新增資料時貼上 Google Maps 連結，就會顯示在這裡</div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" />
+      <div ref={mapRef} style={{ height: 340, borderRadius: 14, overflow: "hidden", border: "0.5px solid #ebebeb", marginBottom: 12 }} />
 
-      <div ref={mapRef} style={{
-        height: 340, borderRadius: 14, overflow: "hidden",
-        border: "0.5px solid #ebebeb", marginBottom: 12,
-      }} />
-
-      {selected && (
-        <div style={{
-          background: "#fff", border: "0.5px solid #ebebeb",
-          borderRadius: 14, padding: "14px 16px", marginBottom: 12,
-        }}>
+      {selected ? (
+        <div style={{ background: "#fff", border: "0.5px solid #ebebeb", borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>{selected.title}</div>
               <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{selected.note}</div>
             </div>
-            <button onClick={() => setSelected(null)} style={{
-              background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: 18, flexShrink: 0,
-            }}>×</button>
+            <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: 18 }}>×</button>
           </div>
           {selected.mapsUrl && (
             <a href={selected.mapsUrl} target="_blank" rel="noreferrer" style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "7px 14px", borderRadius: 20, fontSize: 13,
-              background: "#e8f5ee", color: "#0F6E56",
-              border: "0.5px solid #9FE1CB", textDecoration: "none", fontWeight: 600,
+              background: "#e8f5ee", color: "#0F6E56", border: "0.5px solid #9FE1CB",
+              textDecoration: "none", fontWeight: 600,
             }}>📍 在 Google Maps 開啟</a>
           )}
         </div>
-      )}
-
-      {!selected && (
-        <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", marginBottom: 12 }}>
-          點地圖上的標記查看詳細資訊
-        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", marginBottom: 12 }}>點地圖上的標記查看詳細資訊</div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -186,10 +167,7 @@ function MapView({ items, onSelectItem }) {
           const inCat = withMaps.filter(i => i.category === c.id);
           if (inCat.length === 0) return null;
           return (
-            <div key={c.id} style={{
-              background: "#fff", border: "0.5px solid #ebebeb",
-              borderRadius: 12, padding: "12px 14px",
-            }}>
+            <div key={c.id} style={{ background: "#fff", border: "0.5px solid #ebebeb", borderRadius: 12, padding: "12px 14px" }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>{c.emoji} {c.label}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {inCat.map(item => (
@@ -197,9 +175,8 @@ function MapView({ items, onSelectItem }) {
                     <span style={{ fontSize: 13, color: "#1a1a1a", flex: 1 }}>{item.title}</span>
                     <a href={item.mapsUrl} target="_blank" rel="noreferrer" style={{
                       fontSize: 12, padding: "4px 12px", borderRadius: 20,
-                      background: "#e8f5ee", color: "#0F6E56",
-                      border: "0.5px solid #9FE1CB", textDecoration: "none",
-                      whiteSpace: "nowrap", flexShrink: 0,
+                      background: "#e8f5ee", color: "#0F6E56", border: "0.5px solid #9FE1CB",
+                      textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0,
                     }}>📍 地圖</a>
                   </div>
                 ))}
@@ -240,8 +217,7 @@ function ItemModal({ item, onClose, onSave, userName }) {
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-      zIndex: 200,
+      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 200,
     }} onClick={onClose}>
       <div style={{
         background: "#fff", borderRadius: "20px 20px 0 0",
@@ -249,9 +225,7 @@ function ItemModal({ item, onClose, onSave, userName }) {
         maxHeight: "90vh", overflowY: "auto",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>
-            {editing ? "編輯點子" : "新增一個點子"}
-          </span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>{editing ? "編輯點子" : "新增一個點子"}</span>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#999" }}>×</button>
         </div>
 
@@ -268,8 +242,7 @@ function ItemModal({ item, onClose, onSave, userName }) {
                 padding: "6px 12px", borderRadius: 20, fontSize: 12,
                 border: category === c.id ? "1.5px solid #534AB7" : "0.5px solid #e0e0e0",
                 background: category === c.id ? "#EEEDFE" : "#fff",
-                color: category === c.id ? "#3C3489" : "#666",
-                cursor: "pointer",
+                color: category === c.id ? "#3C3489" : "#666", cursor: "pointer",
               }}>{c.emoji} {c.label}</button>
             ))}
           </div>
@@ -290,20 +263,16 @@ function ItemModal({ item, onClose, onSave, userName }) {
         <div style={{ marginBottom: 22 }}>
           <label style={iStyle.label}>為什麼推薦？ *</label>
           <textarea value={note} onChange={e => setNote(e.target.value)}
-            placeholder="說說你為什麼想去…"
-            rows={3}
+            placeholder="說說你為什麼想去…" rows={3}
             style={{ ...iStyle.input, resize: "none", lineHeight: 1.6 }} />
         </div>
 
         <button onClick={handleSave} disabled={!canSave} style={{
-          width: "100%", padding: "12px 0", borderRadius: 12,
-          border: "none", cursor: canSave ? "pointer" : "not-allowed",
+          width: "100%", padding: "12px 0", borderRadius: 12, border: "none",
+          cursor: canSave ? "pointer" : "not-allowed",
           background: canSave ? "#534AB7" : "#e8e8e8",
-          color: canSave ? "#fff" : "#aaa",
-          fontSize: 15, fontWeight: 700,
-        }}>
-          {editing ? "儲存修改" : "丟進許願池 ✨"}
-        </button>
+          color: canSave ? "#fff" : "#aaa", fontSize: 15, fontWeight: 700,
+        }}>{editing ? "儲存修改" : "丟進許願池 ✨"}</button>
       </div>
     </div>
   );
@@ -318,8 +287,8 @@ function FeedbackSection({ item, userName, onUpdate }) {
   })).filter(r => r.count > 0);
 
   function handleReaction(rid) {
-    let updated;
     const existing = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
+    let updated;
     if (existing?.reaction === rid) {
       updated = item.feedback.filter(f => f !== existing);
     } else if (existing) {
@@ -377,8 +346,7 @@ function FeedbackSection({ item, userName, onUpdate }) {
                 padding: "6px 12px", borderRadius: 20, fontSize: 12,
                 border: myReaction?.reaction === r.id ? "1.5px solid #534AB7" : "0.5px solid #e0e0e0",
                 background: myReaction?.reaction === r.id ? "#EEEDFE" : "#fff",
-                color: myReaction?.reaction === r.id ? "#3C3489" : "#555",
-                cursor: "pointer",
+                color: myReaction?.reaction === r.id ? "#3C3489" : "#555", cursor: "pointer",
               }}>{r.emoji} {r.label}</button>
             ))}
           </div>
@@ -404,10 +372,7 @@ function ItemCard({ item, userName, onUpdate, onEdit }) {
   const srcType = detectSourceType(item.url);
 
   return (
-    <div style={{
-      background: "#fff", border: "0.5px solid #ebebeb",
-      borderRadius: 14, padding: "14px 16px",
-    }}>
+    <div style={{ background: "#fff", border: "0.5px solid #ebebeb", borderRadius: 14, padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <Avatar name={item.author} size={22} />
@@ -489,8 +454,7 @@ function ExportModal({ items, onClose }) {
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-      zIndex: 200,
+      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 200,
     }} onClick={onClose}>
       <div style={{
         background: "#fff", borderRadius: "20px 20px 0 0",
@@ -534,24 +498,17 @@ const VIEWS = [
 ];
 
 export default function App() {
-  const [items, setItems] = useState(() => {
-    try {
-      const s = localStorage.getItem("dalat_v3");
-      return s ? JSON.parse(s) : INITIAL_ITEMS;
-    } catch { return INITIAL_ITEMS; }
-  });
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [view, setView] = useState("list");
   const [activeTab, setActiveTab] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [showExport, setShowExport] = useState(false);
-  const [userName, setUserName] = useState(() => localStorage.getItem("dalat_v3_user") || "");
+  const [userName, setUserName] = useState(() => localStorage.getItem("dalat_user") || "");
   const [nameInput, setNameInput] = useState("");
   const [leafletLoaded, setLeafletLoaded] = useState(false);
-
-  useEffect(() => {
-    try { localStorage.setItem("dalat_v3", JSON.stringify(items)); } catch {}
-  }, [items]);
 
   useEffect(() => {
     if (window.L) { setLeafletLoaded(true); return; }
@@ -565,21 +522,33 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
 
-  function handleSave(item) {
-    if (items.find(i => i.id === item.id)) {
-      setItems(prev => prev.map(i => i.id === item.id ? item : i));
-    } else {
-      setItems(prev => [item, ...prev]);
-    }
+  useEffect(() => {
+    if (!userName) return;
+    fetchItems()
+      .then(data => setItems(data))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [userName]);
+
+  async function handleSave(item) {
+    const updated = items.find(i => i.id === item.id)
+      ? items.map(i => i.id === item.id ? item : i)
+      : [item, ...items];
+    setItems(updated);
+    setSaving(true);
+    await saveItems(updated).finally(() => setSaving(false));
   }
 
-  function handleUpdate(updated) {
-    setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+  async function handleUpdate(updated) {
+    const newItems = items.map(i => i.id === updated.id ? updated : i);
+    setItems(newItems);
+    setSaving(true);
+    await saveItems(newItems).finally(() => setSaving(false));
   }
 
   function handleSetName() {
     if (!nameInput.trim()) return;
-    localStorage.setItem("dalat_v3_user", nameInput.trim());
+    localStorage.setItem("dalat_user", nameInput.trim());
     setUserName(nameInput.trim());
   }
 
@@ -593,8 +562,7 @@ export default function App() {
       }}>
         <div style={{
           background: "#fff", borderRadius: 20, padding: "32px 28px",
-          maxWidth: 360, width: "100%", textAlign: "center",
-          border: "0.5px solid #ebebeb",
+          maxWidth: 360, width: "100%", textAlign: "center", border: "0.5px solid #ebebeb",
         }}>
           <div style={{ fontSize: 44, marginBottom: 10 }}>🌿</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 }}>大叻旅遊許願池</h2>
@@ -641,12 +609,12 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 20 }}>🌿</span>
             <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>大叻許願池</span>
+            {saving && <span style={{ fontSize: 11, color: "#bbb" }}>儲存中…</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button onClick={() => setShowExport(true)} style={{
               padding: "6px 12px", borderRadius: 20, fontSize: 12,
-              border: "0.5px solid #e0e0e0", background: "#fff",
-              color: "#666", cursor: "pointer",
+              border: "0.5px solid #e0e0e0", background: "#fff", color: "#666", cursor: "pointer",
             }}>匯出</button>
             <button onClick={() => { setEditItem(null); setShowAdd(true); }} style={{
               padding: "7px 14px", borderRadius: 20, fontSize: 13,
@@ -689,7 +657,8 @@ export default function App() {
                     {c.emoji} {c.label}
                     {count > 0 && (
                       <span style={{
-                        fontSize: 10, background: activeTab === c.id ? "#AFA9EC" : "#eee",
+                        fontSize: 10,
+                        background: activeTab === c.id ? "#AFA9EC" : "#eee",
                         color: activeTab === c.id ? "#26215C" : "#888",
                         padding: "1px 5px", borderRadius: 10,
                       }}>{count}</span>
@@ -701,7 +670,12 @@ export default function App() {
           </div>
 
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "48px 20px", color: "#bbb" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🌿</div>
+                <div style={{ fontSize: 14 }}>載入中…</div>
+              </div>
+            ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", padding: "48px 20px", color: "#bbb" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🌱</div>
                 <div style={{ fontSize: 14 }}>這個分類還沒有點子，快來丟一個！</div>
@@ -716,9 +690,7 @@ export default function App() {
 
       {view === "map" && (
         <div style={{ padding: 16 }}>
-          {leafletLoaded ? (
-            <MapView items={items} />
-          ) : (
+          {leafletLoaded ? <MapView items={items} /> : (
             <div style={{ textAlign: "center", padding: 40, color: "#bbb" }}>
               <div style={{ fontSize: 24, marginBottom: 8 }}>🗺️</div>
               <div style={{ fontSize: 14 }}>地圖載入中…</div>
