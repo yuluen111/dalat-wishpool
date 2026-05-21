@@ -281,8 +281,8 @@ function FeedbackSection({ item, userName, onUpdate }) {
   const [text, setText] = useState("");
   const myReaction = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
   const reactionCounts = REACTIONS.map(r => ({
-    ...r, count: item.feedback.filter(f => f.reaction === r.id).length,
-  })).filter(r => r.count > 0);
+  ...r, count: item.feedback.filter(f => f.reaction === r.id && !f.text).length,
+})).filter(r => r.count > 0);
 
   function handleReaction(rid) {
     const existing = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
