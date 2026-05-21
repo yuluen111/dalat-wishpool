@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmh9ltQGRNTD9roY6tpsq09e4BCJvZzNlRaqxJDQDVOibHt-a2n-V2hTCmUIiXOxfQ/exec";
 
 const CATEGORIES = [
   { id: "all", label: "全部", emoji: "🗺️" },
@@ -84,18 +83,16 @@ const iStyle = {
 };
 
 async function fetchItems() {
-  const res = await fetch(SCRIPT_URL);
+  const res = await fetch("/api/sheets");
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
 async function saveItems(items) {
-  const form = new FormData();
-  form.append("data", JSON.stringify(items));
-  await fetch(SCRIPT_URL, {
+  await fetch("/api/sheets", {
     method: "POST",
-    mode: "no-cors",
-    body: form,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(items),
   });
 }
 
