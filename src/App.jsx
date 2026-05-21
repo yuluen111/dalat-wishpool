@@ -90,11 +90,12 @@ async function fetchItems() {
 }
 
 async function saveItems(items) {
+  const form = new FormData();
+  form.append("data", JSON.stringify(items));
   await fetch(SCRIPT_URL, {
     method: "POST",
     mode: "no-cors",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(items),
+    body: form,
   });
 }
 
