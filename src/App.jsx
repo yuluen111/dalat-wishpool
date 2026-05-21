@@ -279,10 +279,16 @@ function ItemModal({ item, onClose, onSave, userName }) {
 function FeedbackSection({ item, userName, onUpdate }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+
   const myReaction = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
+  
   const reactionCounts = REACTIONS.map(r => ({
-  ...r, count: item.feedback.filter(f => f.reaction === r.id && !f.text).length,
-})).filter(r => r.count > 0);
+    ...r,
+    count: item.feedback.filter(f => f.reaction === r.id && !f.text).length,
+  })).filter(r => r.count > 0);
+
+  const comments = item.feedback.filter(f => f.text);
+  const totalCount = reactionCounts.reduce((a, r) => a + r.count, 0) + comments.length;
 
   function handleReaction(rid) {
     const existing = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
@@ -299,8 +305,14 @@ function FeedbackSection({ item, userName, onUpdate }) {
 
   function handleComment() {
     if (!text.trim()) return;
-    const myR = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
-    onUpdate({ ...item, feedback: [...item.feedback, { author: userName, text: text.trim(), reaction: myR?.reaction || null, ts: Date.now() }] });
+    onUpdate({
+      ...item,
+      feedback: [...item.feedback, {
+        author: userName,
+        text: text.trim(),
+        ts: Date.now(),
+      }]
+    });
     setText("");
   }
 
@@ -318,19 +330,18 @@ function FeedbackSection({ item, userName, onUpdate }) {
         </div>
         <span style={{ fontSize: 12, color: "#bbb", display: "flex", alignItems: "center", gap: 2 }}>
           <span style={{ display: "inline-block", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none", fontSize: 10 }}>▾</span>
-          {open ? " 收起" : item.feedback.length > 0 ? ` ${item.feedback.length}則回饋` : " 回覆"}
+          {open ? " 收起" : totalCount > 0 ? ` ${totalCount}則回饋` : " 回覆"}
         </span>
       </div>
 
       {open && (
         <div style={{ marginTop: 10 }}>
-          {item.feedback.filter(f => f.text).map((f, i) => (
+          {comments.map((f, i) => (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <Avatar name={f.author} size={24} />
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{f.author}</span>
-                  {f.reaction && <span style={{ fontSize: 11 }}>{REACTIONS.find(r => r.id === f.reaction)?.emoji}</span>}
                   <span style={{ fontSize: 11, color: "#ccc" }}>{timeAgo(f.ts)}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "#555", lineHeight: 1.5, background: "#f8f8f8", borderRadius: 8, padding: "5px 10px" }}>{f.text}</div>
@@ -344,7 +355,8 @@ function FeedbackSection({ item, userName, onUpdate }) {
                 padding: "6px 12px", borderRadius: 20, fontSize: 12,
                 border: myReaction?.reaction === r.id ? "1.5px solid #534AB7" : "0.5px solid #e0e0e0",
                 background: myReaction?.reaction === r.id ? "#EEEDFE" : "#fff",
-                color: myReaction?.reaction === r.id ? "#3C3489" : "#555", cursor: "pointer",
+                color: myReaction?.reaction === r.id ? "#3C3489" : "#555",
+                cursor: "pointer",
               }}>{r.emoji} {r.label}</button>
             ))}
           </div>
