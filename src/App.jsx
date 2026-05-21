@@ -24,11 +24,17 @@ const AVATARS = [
   { bg: "#E6F1FB", color: "#185FA5" },
 ];
 
+const CAT_COLORS = {
+  stay: "#534AB7", food: "#D85A30", activity: "#0F6E56",
+  sight: "#185FA5", transport: "#BA7517", other: "#888780",
+};
+
 const INITIAL_ITEMS = [
   {
     id: 1, title: "K'Ho Coffee — 少數民族咖啡農場",
     url: "https://khocoffee.com",
     mapsUrl: "https://maps.google.com/?q=K'Ho+Coffee+Da+Lat",
+    lat: 11.9294, lng: 108.4079,
     note: "由當地少數民族與外籍人士合作經營，可預約採摘到烘焙的一日體驗，很符合在地感。",
     category: "activity", author: "小花", ts: Date.now() - 7200000,
     feedback: [
@@ -40,6 +46,7 @@ const INITIAL_ITEMS = [
     id: 2, title: "大叻法式咖啡廳老街漫步",
     url: "https://youtube.com/watch?v=example",
     mapsUrl: "https://maps.google.com/?q=Hoang+Dieu+Street+Da+Lat",
+    lat: 11.9404, lng: 108.4384,
     note: "街道很美，適合慢走，不會太累。法式建築保存得很好，嬸嬸應該會喜歡。",
     category: "sight", author: "嬸嬸", ts: Date.now() - 86400000,
     feedback: [
@@ -50,6 +57,7 @@ const INITIAL_ITEMS = [
     id: 3, title: "Légume Guest House — 幾何建築農莊",
     url: "https://instagram.com/p/example",
     mapsUrl: "https://maps.google.com/?q=Legume+Guest+House+Da+Lat",
+    lat: 11.9352, lng: 108.4521,
     note: "照片超美！有有機菜園，感覺可以住這邊當基地每天出發。",
     category: "stay", author: "妹妹", ts: Date.now() - 259200000,
     feedback: [],
@@ -58,6 +66,7 @@ const INITIAL_ITEMS = [
     id: 4, title: "Tuyen Lam Lake 泉林湖",
     url: "",
     mapsUrl: "https://maps.google.com/?q=Tuyen+Lam+Lake+Da+Lat",
+    lat: 11.8947, lng: 108.4201,
     note: "距離市區20分鐘，周邊有農莊型Homestay，適合安靜發呆，也可以租船在湖上漂。",
     category: "sight", author: "小花", ts: Date.now() - 172800000,
     feedback: [
@@ -102,11 +111,6 @@ function detectSourceType(url) {
   return "網站";
 }
 
-function sourceIcon(type) {
-  const map = { "YouTube": "▶", "IG": "◈", "Google Maps": "📍", "Facebook": "f", "網站": "↗" };
-  return map[type] || "↗";
-}
-
 const iStyle = {
   input: {
     width: "100%", padding: "9px 12px", borderRadius: 8,
@@ -115,6 +119,142 @@ const iStyle = {
   },
   label: { fontSize: 12, color: "#888", display: "block", marginBottom: 5, fontWeight: 500 },
 };
+
+// 解析 Google Maps URL 取得座標
+function parseLatLng(mapsUrl) {
+  if (!mapsUrl) return null;
+  const qMatch = mapsUrl.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (qMatch) return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
+  return null;
+}
+
+function MapView({ items, onSelectItem }) {
+  const mapRef = useRef(null);
+  const leafletMap = useRef(null);
+  const markersRef = useRef([]);
+  const [selected, setSelected] = useState(null);
+  const withCoords = items.filter(i => i.lat && i.lng);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (leafletMap.current) return;
+
+    const L = window.L;
+    if (!L) return;
+
+    const map = L.map(mapRef.current, {
+      center: [11.9415, 108.4384],
+      zoom: 13,
+      zoomControl: true,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
+
+    leafletMap.current = map;
+
+    withCoords.forEach(item => {
+      const color = CAT_COLORS[item.category] || "#534AB7";
+      const icon = L.divIcon({
+        html: `<div style="
+          width:32px;height:32px;border-radius:50% 50% 50% 0;
+          background:${color};border:2px solid #fff;
+          transform:rotate(-45deg);
+          box-shadow:0 2px 8px rgba(0,0,0,0.2);
+        "></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        className: "",
+      });
+
+      const marker = L.marker([item.lat, item.lng], { icon })
+        .addTo(map)
+        .on("click", () => setSelected(item));
+
+      markersRef.current.push(marker);
+    });
+
+    return () => {
+      map.remove();
+      leafletMap.current = null;
+    };
+  }, []);
+
+  const withMaps = items.filter(i => i.mapsUrl);
+
+  return (
+    <div>
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" />
+
+      <div ref={mapRef} style={{
+        height: 340, borderRadius: 14, overflow: "hidden",
+        border: "0.5px solid #ebebeb", marginBottom: 12,
+      }} />
+
+      {selected && (
+        <div style={{
+          background: "#fff", border: "0.5px solid #ebebeb",
+          borderRadius: 14, padding: "14px 16px", marginBottom: 12,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>{selected.title}</div>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>{selected.note}</div>
+            </div>
+            <button onClick={() => setSelected(null)} style={{
+              background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: 18, flexShrink: 0,
+            }}>×</button>
+          </div>
+          {selected.mapsUrl && (
+            <a href={selected.mapsUrl} target="_blank" rel="noreferrer" style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 20, fontSize: 13,
+              background: "#e8f5ee", color: "#0F6E56",
+              border: "0.5px solid #9FE1CB", textDecoration: "none", fontWeight: 600,
+            }}>📍 在 Google Maps 開啟</a>
+          )}
+        </div>
+      )}
+
+      {!selected && (
+        <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", marginBottom: 12 }}>
+          點地圖上的標記查看詳細資訊
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {CATEGORIES.filter(c => c.id !== "all").map(c => {
+          const inCat = withMaps.filter(i => i.category === c.id);
+          if (inCat.length === 0) return null;
+          return (
+            <div key={c.id} style={{
+              background: "#fff", border: "0.5px solid #ebebeb",
+              borderRadius: 12, padding: "12px 14px",
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>{c.emoji} {c.label}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {inCat.map(item => (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 13, color: "#1a1a1a", flex: 1 }}>{item.title}</span>
+                    <a href={item.mapsUrl} target="_blank" rel="noreferrer" style={{
+                      fontSize: 12, padding: "4px 12px", borderRadius: 20,
+                      background: "#e8f5ee", color: "#0F6E56",
+                      border: "0.5px solid #9FE1CB", textDecoration: "none",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                    }}>📍 地圖</a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function ItemModal({ item, onClose, onSave, userName }) {
   const editing = !!item?.id;
@@ -127,9 +267,12 @@ function ItemModal({ item, onClose, onSave, userName }) {
 
   function handleSave() {
     if (!canSave) return;
+    const coords = parseLatLng(mapsUrl);
     onSave({
       ...(item || {}),
       title, url, mapsUrl, note, category,
+      lat: coords?.lat || item?.lat || null,
+      lng: coords?.lng || item?.lng || null,
       author: item?.author || userName,
       ts: item?.ts || Date.now(),
       feedback: item?.feedback || [],
@@ -142,7 +285,7 @@ function ItemModal({ item, onClose, onSave, userName }) {
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
-      zIndex: 200, padding: "0",
+      zIndex: 200,
     }} onClick={onClose}>
       <div style={{
         background: "#fff", borderRadius: "20px 20px 0 0",
@@ -153,7 +296,7 @@ function ItemModal({ item, onClose, onSave, userName }) {
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>
             {editing ? "編輯點子" : "新增一個點子"}
           </span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#999", lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#999" }}>×</button>
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -179,14 +322,13 @@ function ItemModal({ item, onClose, onSave, userName }) {
         <div style={{ marginBottom: 14 }}>
           <label style={iStyle.label}>連結（選填）</label>
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="網站、YouTube、IG…" style={iStyle.input} />
-          {url && <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-            偵測為：{detectSourceType(url) || "未知來源"}
-          </div>}
+          {url && <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>偵測為：{detectSourceType(url)}</div>}
         </div>
 
         <div style={{ marginBottom: 14 }}>
           <label style={iStyle.label}>📍 Google Maps 連結（選填）</label>
           <input value={mapsUrl} onChange={e => setMapsUrl(e.target.value)} placeholder="貼上 Google Maps 網址…" style={iStyle.input} />
+          <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>貼入後地點會自動顯示在地圖上</div>
         </div>
 
         <div style={{ marginBottom: 22 }}>
@@ -214,7 +356,7 @@ function ItemModal({ item, onClose, onSave, userName }) {
 function FeedbackSection({ item, userName, onUpdate }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const myReaction = item.feedback.find(f => f.author === userName && f.reaction);
+  const myReaction = item.feedback.find(f => f.author === userName && f.reaction && !f.text);
   const reactionCounts = REACTIONS.map(r => ({
     ...r, count: item.feedback.filter(f => f.reaction === r.id).length,
   })).filter(r => r.count > 0);
@@ -335,7 +477,7 @@ function ItemCard({ item, userName, onUpdate, onEdit }) {
             fontSize: 11, padding: "2px 10px", borderRadius: 20,
             background: "#f0f0f0", color: "#666", border: "0.5px solid #e0e0e0",
             textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3,
-          }}>{sourceIcon(srcType)} {srcType}</a>
+          }}>↗ {srcType}</a>
         )}
         {item.mapsUrl && (
           <a href={item.mapsUrl} target="_blank" rel="noreferrer" style={{
@@ -354,83 +496,6 @@ function ItemCard({ item, userName, onUpdate, onEdit }) {
       }}>{item.note}</div>
 
       <FeedbackSection item={item} userName={userName} onUpdate={onUpdate} />
-    </div>
-  );
-}
-
-function MapView({ items }) {
-  const withMaps = items.filter(i => i.mapsUrl);
-  const cat = (id) => CATEGORIES.find(c => c.id === id);
-
-  if (withMaps.length === 0) {
-    return (
-      <div style={{ textAlign: "center", padding: "60px 20px", color: "#bbb" }}>
-        <div style={{ fontSize: 36, marginBottom: 10 }}>📍</div>
-        <div style={{ fontSize: 14 }}>還沒有地點有地圖連結</div>
-        <div style={{ fontSize: 12, marginTop: 6 }}>新增資料時貼上 Google Maps 連結，就會顯示在這裡</div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ padding: "0 0 24px" }}>
-      <div style={{
-        background: "#e8f0e8", borderRadius: 14, margin: "0 0 16px",
-        padding: 20, textAlign: "center", position: "relative", overflow: "hidden",
-      }}>
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{ fontSize: 13, color: "#555", marginBottom: 12, fontWeight: 500 }}>
-            共 {withMaps.length} 個地點有地圖資訊
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-            {withMaps.map(item => (
-              <a key={item.id} href={item.mapsUrl} target="_blank" rel="noreferrer" style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "8px 14px", borderRadius: 20,
-                background: "#fff", border: "0.5px solid #c8e6c9",
-                fontSize: 13, color: "#1a1a1a", textDecoration: "none",
-                fontWeight: 500,
-              }}>
-                <span style={{
-                  width: 10, height: 10, borderRadius: "50%",
-                  background: getAvatarStyle(item.category).bg,
-                  border: `2px solid ${getAvatarStyle(item.category).color}`,
-                  flexShrink: 0,
-                }}></span>
-                {item.title}
-                <span style={{ fontSize: 11, color: "#999" }}>↗</span>
-              </a>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginBottom: 16 }}>點擊地點名稱直接開啟 Google Maps</div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {CATEGORIES.filter(c => c.id !== "all").map(c => {
-          const inCat = withMaps.filter(i => i.category === c.id);
-          if (inCat.length === 0) return null;
-          return (
-            <div key={c.id} style={{ background: "#fff", border: "0.5px solid #ebebeb", borderRadius: 12, padding: "12px 14px" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>{c.emoji} {c.label}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {inCat.map(item => (
-                  <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ fontSize: 13, color: "#1a1a1a", flex: 1 }}>{item.title}</span>
-                    <a href={item.mapsUrl} target="_blank" rel="noreferrer" style={{
-                      fontSize: 12, padding: "4px 12px", borderRadius: 20,
-                      background: "#e8f5ee", color: "#0F6E56",
-                      border: "0.5px solid #9FE1CB", textDecoration: "none",
-                      whiteSpace: "nowrap", flexShrink: 0,
-                    }}>📍 開啟地圖</a>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -463,15 +528,7 @@ function ExportModal({ items, onClose }) {
     return lines.join("\n");
   }
 
-  function exportJSON() {
-    return JSON.stringify(items, null, 2);
-  }
-
-  const content = mode === "text" ? exportText() : exportJSON();
-
-  function copyAll() {
-    navigator.clipboard.writeText(content).catch(() => {});
-  }
+  const content = mode === "text" ? exportText() : JSON.stringify(items, null, 2);
 
   return (
     <div style={{
@@ -488,7 +545,6 @@ function ExportModal({ items, onClose }) {
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>匯出資料</span>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#999" }}>×</button>
         </div>
-
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           {[["text", "📄 文字整理版"], ["json", "💾 JSON 備份"]].map(([id, label]) => (
             <button key={id} onClick={() => setMode(id)} style={{
@@ -500,15 +556,13 @@ function ExportModal({ items, onClose }) {
             }}>{label}</button>
           ))}
         </div>
-
         <textarea readOnly value={content} style={{
           flex: 1, minHeight: 200, padding: "10px 12px", borderRadius: 10,
           border: "0.5px solid #e0e0e0", fontSize: 12, color: "#333",
           background: "#fafafa", resize: "none", fontFamily: "monospace",
           lineHeight: 1.6, marginBottom: 12,
         }} />
-
-        <button onClick={copyAll} style={{
+        <button onClick={() => navigator.clipboard.writeText(content).catch(() => {})} style={{
           width: "100%", padding: "11px 0", borderRadius: 12,
           border: "none", background: "#534AB7", color: "#fff",
           fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -526,7 +580,7 @@ const VIEWS = [
 export default function App() {
   const [items, setItems] = useState(() => {
     try {
-      const s = localStorage.getItem("dalat_v2");
+      const s = localStorage.getItem("dalat_v3");
       return s ? JSON.parse(s) : INITIAL_ITEMS;
     } catch { return INITIAL_ITEMS; }
   });
@@ -535,12 +589,25 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [showExport, setShowExport] = useState(false);
-  const [userName, setUserName] = useState(() => localStorage.getItem("dalat_v2_user") || "");
+  const [userName, setUserName] = useState(() => localStorage.getItem("dalat_v3_user") || "");
   const [nameInput, setNameInput] = useState("");
+  const [leafletLoaded, setLeafletLoaded] = useState(false);
 
   useEffect(() => {
-    try { localStorage.setItem("dalat_v2", JSON.stringify(items)); } catch {}
+    try { localStorage.setItem("dalat_v3", JSON.stringify(items)); } catch {}
   }, [items]);
+
+  useEffect(() => {
+    if (window.L) { setLeafletLoaded(true); return; }
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.onload = () => setLeafletLoaded(true);
+    document.head.appendChild(script);
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(link);
+  }, []);
 
   function handleSave(item) {
     if (items.find(i => i.id === item.id)) {
@@ -556,7 +623,7 @@ export default function App() {
 
   function handleSetName() {
     if (!nameInput.trim()) return;
-    localStorage.setItem("dalat_v2_user", nameInput.trim());
+    localStorage.setItem("dalat_v3_user", nameInput.trim());
     setUserName(nameInput.trim());
   }
 
@@ -612,8 +679,7 @@ export default function App() {
 
       <div style={{
         background: "#fff", borderBottom: "0.5px solid #ebebeb",
-        padding: "12px 16px",
-        position: "sticky", top: 0, zIndex: 10,
+        padding: "12px 16px", position: "sticky", top: 0, zIndex: 10,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -694,7 +760,14 @@ export default function App() {
 
       {view === "map" && (
         <div style={{ padding: 16 }}>
-          <MapView items={items} />
+          {leafletLoaded ? (
+            <MapView items={items} />
+          ) : (
+            <div style={{ textAlign: "center", padding: 40, color: "#bbb" }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>🗺️</div>
+              <div style={{ fontSize: 14 }}>地圖載入中…</div>
+            </div>
+          )}
         </div>
       )}
     </div>
