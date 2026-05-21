@@ -29,51 +29,7 @@ const CAT_COLORS = {
   sight: "#185FA5", transport: "#BA7517", other: "#888780",
 };
 
-const INITIAL_ITEMS = [
-  {
-    id: 1, title: "K'Ho Coffee — 少數民族咖啡農場",
-    url: "https://khocoffee.com",
-    mapsUrl: "https://maps.google.com/?q=K'Ho+Coffee+Da+Lat",
-    lat: 11.9294, lng: 108.4079,
-    note: "由當地少數民族與外籍人士合作經營，可預約採摘到烘焙的一日體驗，很符合在地感。",
-    category: "activity", author: "小花", ts: Date.now() - 7200000,
-    feedback: [
-      { author: "嬸嬸", reaction: "go", text: "這個看起來很有意思，希望不會走太多路", ts: Date.now() - 3600000 },
-      { author: "妹妹", reaction: "go", text: "照片超美！我要去！", ts: Date.now() - 1800000 },
-    ],
-  },
-  {
-    id: 2, title: "大叻法式咖啡廳老街漫步",
-    url: "https://youtube.com/watch?v=example",
-    mapsUrl: "https://maps.google.com/?q=Hoang+Dieu+Street+Da+Lat",
-    lat: 11.9404, lng: 108.4384,
-    note: "街道很美，適合慢走，不會太累。法式建築保存得很好，嬸嬸應該會喜歡。",
-    category: "sight", author: "嬸嬸", ts: Date.now() - 86400000,
-    feedback: [
-      { author: "小花", reaction: "go", text: "可以排在第一天，當暖身", ts: Date.now() - 82000000 },
-    ],
-  },
-  {
-    id: 3, title: "Légume Guest House — 幾何建築農莊",
-    url: "https://instagram.com/p/example",
-    mapsUrl: "https://maps.google.com/?q=Legume+Guest+House+Da+Lat",
-    lat: 11.9352, lng: 108.4521,
-    note: "照片超美！有有機菜園，感覺可以住這邊當基地每天出發。",
-    category: "stay", author: "妹妹", ts: Date.now() - 259200000,
-    feedback: [],
-  },
-  {
-    id: 4, title: "Tuyen Lam Lake 泉林湖",
-    url: "",
-    mapsUrl: "https://maps.google.com/?q=Tuyen+Lam+Lake+Da+Lat",
-    lat: 11.8947, lng: 108.4201,
-    note: "距離市區20分鐘，周邊有農莊型Homestay，適合安靜發呆，也可以租船在湖上漂。",
-    category: "sight", author: "小花", ts: Date.now() - 172800000,
-    feedback: [
-      { author: "嬸嬸", reaction: "maybe", text: "租船感覺不錯，但要看天氣", ts: Date.now() - 160000000 },
-    ],
-  },
-];
+const INITIAL_ITEMS = [];
 
 function getAvatarStyle(name) {
   if (!name) return AVATARS[0];
